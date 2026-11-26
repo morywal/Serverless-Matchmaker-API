@@ -1,0 +1,91 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Phase 1 Serverless Multiplayer Matchmaking & Leaderboard API.
+
+Globals:
+  Function:
+    Runtime: python3.12
+    CodeUri: src/
+    Timeout: 10
+    MemorySize: 256
+
+Resources:
+  MatchmakerTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: region
+          AttributeType: S
+        - AttributeName: mmr
+          AttributeType: N
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: LeaderboardIndex
+          KeySchema:
+            - AttributeName: region
+              KeyType: HASH
+            - AttributeName: mmr
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  MatchmakerHttpApi:
+    Type: AWS::Serverless::HttpApi
+
+  CreatePlayerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers.create_player.lambda_handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref MatchmakerTable
+      Policies:
+        - DynamoDBWritePolicy:
+            TableName: !Ref MatchmakerTable
+      Events:
+        CreatePlayer:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MatchmakerHttpApi
+            Path: /players
+            Method: POST
+
+  GetLeaderboardFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handlers.get_leaderboard.lambda_handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref MatchmakerTable
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MatchmakerTable
+      Events:
+        GetLeaderboard:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MatchmakerHttpApi
+            Path: /leaderboard
+            Method: GET
+
+Outputs:
+  HttpApiUrl:
+    Description: Base URL of the HTTP API
+    Value: !Sub "https://${MatchmakerHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}"
+    Export:
+      Name: !Sub "${AWS::StackName}-HttpApiUrl"
+  MatchmakerTableName:
+    Description: Name of the DynamoDB table
+    Value: !Ref MatchmakerTable
+    Export:
+      Name: !Sub "${AWS::StackName}-MatchmakerTableName"
