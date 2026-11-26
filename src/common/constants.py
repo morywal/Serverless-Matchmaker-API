@@ -1,0 +1,1 @@
+VALID_REGIONS = ("NA", "EU", "AP")
